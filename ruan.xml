@@ -1,2 +1,13 @@
-<?xml version="1.0"?>
-<manifest></manifest>
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Local manifest: add to $AERA_TREE/.repo/local_manifests/ruan.xml -->
+<manifest>
+    <remote name="AERA" fetch="https://github.com/AERA-Recovery" revision="aera-16.0" />
+    <remote name="starter" fetch="https://github.com/YOUR_USERNAME" revision="aera-16.0" />
+
+    <!-- Replace the URL with your own fork after reviewing this tree. -->
+    <project path="device/xiaomi/ruan" name="device_xiaomi_ruan-AERA" remote="starter" />
+
+    <project path="device/xiaomi/sm84xx-common"
+             name="android_device_xiaomi_sm84xx-common-AERA" remote="AERA" />
+    <project path="vendor/recovery" name="android_vendor_recovery" remote="AERA" />
+</manifest>

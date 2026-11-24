@@ -1,0 +1,90 @@
+# GitHub Actions workflow for building AERA Recovery for POCO Pad 5G (ruan).
+#
+# IMPORTANT: the default `ubuntu-latest` runner is too small (7 GB RAM / 14 GB
+# disk). Change `runs-on` to a larger x64 runner, e.g.:
+#   GitHub larger runner (Team/Enterprise): ubuntu-24.04-8core  (8 CPU/32 GB/300 GB)
+#   WarpBuild on any GitHub account:         warp-ubuntu-latest-x64-8x
+#
+# Put this file in your repo at .github/workflows/build.yml and push.
+# The device tree must be the repo contents (i.e. the contents of
+# aera_ruan_device_tree/ committed at the repo root).
+
+name: Build AERA Recovery for ruan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    # CHANGE THIS to a runner with >= 16 GB RAM and >= 150 GB SSD.
+    runs-on: warp-ubuntu-latest-x64-8x
+
+    timeout-minutes: 720
+
+    steps:
+      - name: Checkout device tree
+        uses: actions/checkout@v4
+        with:
+          path: aera/device/xiaomi/ruan
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            git-core gnupg flex bison build-essential zip curl \
+            zlib1g-dev libc6-dev-i386 libncurses5 lib32ncurses5-dev \
+            x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev \
+            libxml2-utils xsltproc unzip fontconfig python3 \
+            openjdk-17-jdk ccache schedtool rsync squashfs-tools \
+            dosfstools e2fsprogs
+          curl -sSL https://storage.googleapis.com/git-repo-downloads/repo \
+            | sudo tee /usr/local/bin/repo > /dev/null
+          sudo chmod a+x /usr/local/bin/repo
+
+      - name: Init AERA source
+        working-directory: aera
+        run: |
+          git config --global user.name "builder"
+          git config --global user.email "builder@example.com"
+          repo init --depth=1 \
+            -u https://github.com/AERA-Recovery/android_manifest \
+            -b aera-16.0
+
+      - name: Add local manifest for ruan dependencies
+        working-directory: aera
+        run: |
+          mkdir -p .repo/local_manifests
+          cat > .repo/local_manifests/ruan.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <manifest>
+            <remote name="AERA" fetch="https://github.com/AERA-Recovery" revision="aera-16.0" />
+            <project path="device/xiaomi/sm84xx-common"
+                     name="android_device_xiaomi_sm84xx-common-AERA" remote="AERA" />
+            <project path="vendor/recovery" name="android_vendor_recovery" remote="AERA" />
+          </manifest>
+          XML
+
+      - name: Sync sources
+        working-directory: aera
+        run: repo sync -c --no-clone-bundle --no-tags -j4 --fail-fast
+
+      - name: Build recovery
+        working-directory: aera
+        run: |
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export USE_CCACHE=1
+          export CCACHE_DIR=$PWD/.ccache
+          ccache -M 20G || true
+          source build/envsetup.sh
+          lunch twrp_ruan-bp2a-eng
+          mka -j4 recoveryimage
+
+      - name: Upload recovery.img
+        uses: actions/upload-artifact@v4
+        with:
+          name: aera-ruan-recovery
+          path: aera/out/target/product/ruan/recovery.img
+          retention-days: 14
+          if-no-files-found: error
